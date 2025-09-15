@@ -9,8 +9,9 @@
 		"required": ["name","apiKey", "profileId"],
 		"properties": {
 			"name": {
-        "title": "Name",
-        "type": "string"
+        "title": "Platform Name",
+        "type": "string",
+				"default": "NextDNS"
       },
 			"apiKey": {
 				"title": "API Key",
