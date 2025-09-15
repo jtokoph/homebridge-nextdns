@@ -1,4 +1,8 @@
-import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
+import type {
+  CharacteristicValue,
+  PlatformAccessory,
+  Service,
+} from 'homebridge';
 
 import type { NextDNSPlatform } from './platform.js';
 
@@ -11,21 +15,32 @@ export class BlockedDomainAccessory {
     private readonly platform: NextDNSPlatform,
     private readonly accessory: PlatformAccessory,
   ) {
-    platform.log.debug('BlockedDomainAccessory', accessory.context.domain, accessory.context.isOn);
+    platform.log.debug(
+      'BlockedDomainAccessory',
+      accessory.context.domain,
+      accessory.context.isOn,
+    );
 
     // biome-ignore lint/style/noNonNullAssertion: because we know it exists
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
+    this.accessory
+      .getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'NextDNS')
       .setCharacteristic(this.platform.Characteristic.Model, 'NextDNS')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, 'NextDNS');
 
-    this.service = this.accessory.getService(this.platform.Service.Switch) || this.accessory.addService(this.platform.Service.Switch);
+    this.service =
+      this.accessory.getService(this.platform.Service.Switch) ||
+      this.accessory.addService(this.platform.Service.Switch);
 
     this.isOn = this.accessory.context.isOn === true;
 
-    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.displayName);
+    this.service.setCharacteristic(
+      this.platform.Characteristic.Name,
+      accessory.context.displayName,
+    );
 
-    this.service.getCharacteristic(this.platform.Characteristic.On)
+    this.service
+      .getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setOn.bind(this))
       .onGet(this.getOn.bind(this));
 

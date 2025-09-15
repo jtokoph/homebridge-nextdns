@@ -11,7 +11,6 @@ import fetch from 'node-fetch';
 import { BlockedDomainAccessory } from './blockedDomainAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
-
 function getUUID(api: API, domain: string) {
   return api.hap.uuid.generate(`next-dns-blocked-domain:${domain}`);
 }
@@ -19,7 +18,7 @@ function getUUID(api: API, domain: string) {
 function toTitleCase(str: string) {
   return str.replace(
     /\w\S*/g,
-    text => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase()
+    (text) => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase(),
   );
 }
 
@@ -34,13 +33,16 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
 
   // this is used to track restored cached accessories
   public readonly accessories: Map<string, PlatformAccessory> = new Map();
-  public readonly BlockedDomainAccessories: Map<string, BlockedDomainAccessory> = new Map();
+  public readonly BlockedDomainAccessories: Map<
+    string,
+    BlockedDomainAccessory
+  > = new Map();
   public readonly discoveredCacheUUIDs: string[] = [];
 
   constructor(
-		public readonly log: Logging,
-		public readonly config: PlatformConfig,
-		public readonly api: API,
+    public readonly log: Logging,
+    public readonly config: PlatformConfig,
+    public readonly api: API,
   ) {
     this.log.debug('config', config);
 
@@ -48,7 +50,9 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
 
     if (!this.config.apiKey || !this.config.profileId) {
-      this.log.error(`${config.name} is not configured correctly. apiKey and profileId are required. The configuration provided was: ${JSON.stringify(config)}`);
+      this.log.error(
+        `${config.name} is not configured correctly. apiKey and profileId are required. The configuration provided was: ${JSON.stringify(config)}`,
+      );
       return;
     }
 
@@ -66,9 +70,9 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
   }
 
   /**
-	 * This function is invoked when homebridge restores cached accessories from disk at startup.
-	 * It should be used to set up event handlers for characteristics and update respective values.
-	 */
+   * This function is invoked when homebridge restores cached accessories from disk at startup.
+   * It should be used to set up event handlers for characteristics and update respective values.
+   */
   configureAccessory(accessory: PlatformAccessory) {
     this.log.debug('Loading accessory from cache:', accessory.displayName);
 
@@ -79,18 +83,26 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
   async discoverDevices() {
     const blockedDomains = this.config.blockedDomains || [];
 
-    const response = await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}`, {
-      headers: {
-        'x-api-key': this.config.apiKey,
+    const response = await fetch(
+      `https://api.nextdns.io/profiles/${this.config.profileId}`,
+      {
+        headers: {
+          'x-api-key': this.config.apiKey,
+        },
       },
-    });
+    );
 
-    const data = await response.json() as { data: { denylist: Array<{ id: string, active: boolean}> } };
+    const data = (await response.json()) as {
+      data: { denylist: Array<{ id: string; active: boolean }> };
+    };
 
-    const nextDNSBlockedDomains = data.data.denylist.reduce((acc, domain) => {
-      acc[domain.id] = domain.active;
-      return acc;
-    }, {} as Record<string, boolean>);
+    const nextDNSBlockedDomains = data.data.denylist.reduce(
+      (acc, domain) => {
+        acc[domain.id] = domain.active;
+        return acc;
+      },
+      {} as Record<string, boolean>,
+    );
 
     this.log.debug('nextDNSBlockedDomains', nextDNSBlockedDomains);
 
@@ -107,16 +119,16 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
         existingAccessory.context.isOn = !!nextDNSBlockedDomains[blockedDomain];
         this.api.updatePlatformAccessories([existingAccessory]);
 
-        this.BlockedDomainAccessories.set(uuid, new BlockedDomainAccessory(this, existingAccessory));
+        this.BlockedDomainAccessories.set(
+          uuid,
+          new BlockedDomainAccessory(this, existingAccessory),
+        );
       } else {
         this.log.debug('Adding new accessory:', uuid);
 
         const displayName = toTitleCase(`${blockedDomain.split('.')[0]} block`);
 
-        const accessory = new this.api.platformAccessory(
-          displayName,
-          uuid,
-        );
+        const accessory = new this.api.platformAccessory(displayName, uuid);
 
         // store a copy of the device object in the `accessory.context`
         // the `context` property can be used to store any data about the accessory you may need
@@ -126,7 +138,10 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
 
         // create the accessory handler for the newly create accessory
         // this is imported from `platformAccessory.ts`
-        this.BlockedDomainAccessories.set(uuid, new BlockedDomainAccessory(this, accessory));
+        this.BlockedDomainAccessories.set(
+          uuid,
+          new BlockedDomainAccessory(this, accessory),
+        );
 
         // link the accessory to your platform
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
@@ -160,74 +175,109 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
   async bootstrapAsyncUpdates() {
     const syncConfig = async () => {
       this.log.debug('syncConfig called');
-      const response = await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}`, {
-        headers: {
-          'x-api-key': this.config.apiKey,
+      const response = await fetch(
+        `https://api.nextdns.io/profiles/${this.config.profileId}`,
+        {
+          headers: {
+            'x-api-key': this.config.apiKey,
+          },
         },
-      });
+      );
 
-      const data = await response.json() as { data: { denylist: Array<{ id: string, active: boolean}> } };
+      const data = (await response.json()) as {
+        data: { denylist: Array<{ id: string; active: boolean }> };
+      };
 
       data.data.denylist.forEach(async (blockedDomain) => {
-        const accessory = this.accessories.get(getUUID(this.api, blockedDomain.id));
+        const accessory = this.accessories.get(
+          getUUID(this.api, blockedDomain.id),
+        );
         const service = accessory?.getService(this.Service.Switch);
-        if (service && service.getCharacteristic(this.Characteristic.On).value !== blockedDomain.active) {
-          this.log.debug('updating accessory', blockedDomain.id, blockedDomain.active);
-          service?.updateCharacteristic(this.Characteristic.On, blockedDomain.active);
+        if (
+          service &&
+          service.getCharacteristic(this.Characteristic.On).value !==
+            blockedDomain.active
+        ) {
+          this.log.debug(
+            'updating accessory',
+            blockedDomain.id,
+            blockedDomain.active,
+          );
+          service?.updateCharacteristic(
+            this.Characteristic.On,
+            blockedDomain.active,
+          );
         }
 
-        const blockedDomainAccessory = this.BlockedDomainAccessories.get(getUUID(this.api, blockedDomain.id));
+        const blockedDomainAccessory = this.BlockedDomainAccessories.get(
+          getUUID(this.api, blockedDomain.id),
+        );
 
         if (blockedDomainAccessory) {
-          this.accessories.get('adf')?.getService(this.Service.Switch)?.updateCharacteristic(this.Characteristic.On, blockedDomain.active);
+          this.accessories
+            .get('adf')
+            ?.getService(this.Service.Switch)
+            ?.updateCharacteristic(
+              this.Characteristic.On,
+              blockedDomain.active,
+            );
           blockedDomainAccessory.isOn = blockedDomain.active;
         }
       });
 
       setTimeout(syncConfig, 60000);
-    }
+    };
 
     syncConfig();
   }
 
   async blockDomain(domain: string) {
-    const response = await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.config.apiKey,
-      },
-      body: JSON.stringify({
-        active: true,
-      }),
-    });
-
-    if (!response.ok) {
-      // create the new domain
-      await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}/denylist`, {
-        method: 'POST',
+    const response = await fetch(
+      `https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`,
+      {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.config.apiKey,
         },
         body: JSON.stringify({
-          id: domain,
           active: true,
         }),
-      });
+      },
+    );
+
+    if (!response.ok) {
+      // create the new domain
+      await fetch(
+        `https://api.nextdns.io/profiles/${this.config.profileId}/denylist`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.config.apiKey,
+          },
+          body: JSON.stringify({
+            id: domain,
+            active: true,
+          }),
+        },
+      );
     }
   }
 
   async unblockDomain(domain: string) {
-    await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.config.apiKey,
+    await fetch(
+      `https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.config.apiKey,
+        },
+        body: JSON.stringify({
+          active: false,
+        }),
       },
-      body: JSON.stringify({
-        active: false,
-      }),
-    });
+    );
   }
 }
