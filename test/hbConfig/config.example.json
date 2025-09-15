@@ -23,7 +23,7 @@
 			"platform": "HomebridgeNextDNS",
 			"name": "homebridge-nextdns",
 			"apiKey": "1234567890",
-      "profileId": "1234567890"
+			"profileId": "abc123"
 		}
 	],
 	"accessories": []

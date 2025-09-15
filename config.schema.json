@@ -1,17 +1,35 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
-  "pluginType": "platform",
-  "singular": true,
-  "strictValidation": false,
-  "schema": {
-    "type": "object",
-    "properties": {
-      "name": {
-        "title": "Name",
-        "type": "string",
-        "required": true,
-        "default": "Example Dynamic Platform"
-      }
-    }
-  }
+	"pluginAlias": "HomebridgeNextDNS",
+	"pluginType": "platform",
+	"singular": true,
+	"strictValidation": false,
+	"headerDisplay": "Find your API key at https://my.nextdns.io/account",
+	"schema": {
+		"type": "object",
+		"properties": {
+			"apiKey": {
+				"title": "API Key",
+				"description": "Your NextDNS API key from https://my.nextdns.io/account",
+				"type": "string",
+				"required": true
+			},
+			"profileId": {
+				"title": "Profile ID",
+				"description": "The profile to configure. Find it in the URL of the profile page: https://my.nextdns.io/<profileId>/setup",
+				"type": "string",
+				"required": true
+			},
+			"blockedDomains": {
+				"title": "Blocked Domains",
+				"description": "The domains to create switches for.",
+				"type": "array",
+				"items": {
+					"type": "string",
+					"description": "Example: reddit.com"
+				},
+				"required": false,
+				"default": []
+			}
+		}
+	}
 }

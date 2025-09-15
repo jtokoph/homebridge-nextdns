@@ -123,4 +123,5 @@ dist
 # Webstorm
 .idea
 
-/test/hbConfig
+/test/hbConfig/*
+!/test/hbConfig/config.example.json

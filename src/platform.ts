@@ -1,41 +1,56 @@
-import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
-
-import { ExamplePlatformAccessory } from './platformAccessory.js';
+import type {
+  API,
+  Characteristic,
+  DynamicPlatformPlugin,
+  Logging,
+  PlatformAccessory,
+  PlatformConfig,
+  Service,
+} from 'homebridge';
+import fetch from 'node-fetch';
+import { BlockedDomainAccessory } from './blockedDomainAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
-// This is only required when using Custom Services and Characteristics not support by HomeKit
-import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
+
+function getUUID(api: API, domain: string) {
+  return api.hap.uuid.generate(`next-dns-blocked-domain:${domain}`);
+}
+
+function toTitleCase(str: string) {
+  return str.replace(
+    /\w\S*/g,
+    text => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase()
+  );
+}
 
 /**
  * HomebridgePlatform
  * This class is the main constructor for your plugin, this is where you should
  * parse the user config and discover/register accessories with Homebridge.
  */
-export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
+export class NextDNSPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
 
   // this is used to track restored cached accessories
   public readonly accessories: Map<string, PlatformAccessory> = new Map();
+  public readonly BlockedDomainAccessories: Map<string, BlockedDomainAccessory> = new Map();
   public readonly discoveredCacheUUIDs: string[] = [];
 
-  // This is only required when using Custom Services and Characteristics not support by HomeKit
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomServices: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomCharacteristics: any;
-
   constructor(
-    public readonly log: Logging,
-    public readonly config: PlatformConfig,
-    public readonly api: API,
+		public readonly log: Logging,
+		public readonly config: PlatformConfig,
+		public readonly api: API,
   ) {
+    this.log.debug('config', config);
+
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
 
-    // This is only required when using Custom Services and Characteristics not support by HomeKit
-    this.CustomServices = new EveHomeKitTypes(this.api).Services;
-    this.CustomCharacteristics = new EveHomeKitTypes(this.api).Characteristics;
+    if (!this.config.apiKey || !this.config.profileId) {
+      this.log.error(`${config.name} is not configured correctly. apiKey and profileId are required. The configuration provided was: ${JSON.stringify(config)}`);
+      return;
+    }
 
     this.log.debug('Finished initializing platform:', this.config.name);
 
@@ -51,86 +66,72 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to set up event handlers for characteristics and update respective values.
-   */
+	 * This function is invoked when homebridge restores cached accessories from disk at startup.
+	 * It should be used to set up event handlers for characteristics and update respective values.
+	 */
   configureAccessory(accessory: PlatformAccessory) {
-    this.log.info('Loading accessory from cache:', accessory.displayName);
+    this.log.debug('Loading accessory from cache:', accessory.displayName);
 
     // add the restored accessory to the accessories cache, so we can track if it has already been registered
     this.accessories.set(accessory.UUID, accessory);
   }
 
-  /**
-   * This is an example method showing how to register discovered accessories.
-   * Accessories must only be registered once, previously created accessories
-   * must not be registered again to prevent "duplicate UUID" errors.
-   */
-  discoverDevices() {
-    // EXAMPLE ONLY
-    // A real plugin you would discover accessories from the local network, cloud services
-    // or a user-defined array in the platform config.
-    const exampleDevices = [
-      {
-        exampleUniqueId: 'ABCD',
-        exampleDisplayName: 'Bedroom',
-      },
-      {
-        exampleUniqueId: 'EFGH',
-        exampleDisplayName: 'Kitchen',
-      },
-      {
-        // This is an example of a device which uses a Custom Service
-        exampleUniqueId: 'IJKL',
-        exampleDisplayName: 'Backyard',
-        CustomService: 'AirPressureSensor',
-      },
-    ];
+  async discoverDevices() {
+    const blockedDomains = this.config.blockedDomains || [];
 
-    // loop over the discovered devices and register each one if it has not already been registered
-    for (const device of exampleDevices) {
-      // generate a unique id for the accessory this should be generated from
-      // something globally unique, but constant, for example, the device serial
-      // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.exampleUniqueId);
+    const response = await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}`, {
+      headers: {
+        'x-api-key': this.config.apiKey,
+      },
+    });
 
-      // see if an accessory with the same uuid has already been registered and restored from
-      // the cached devices we stored in the `configureAccessory` method above
+    const data = await response.json() as { data: { denylist: Array<{ id: string, active: boolean}> } };
+
+    const nextDNSBlockedDomains = data.data.denylist.reduce((acc, domain) => {
+      acc[domain.id] = domain.active;
+      return acc;
+    }, {} as Record<string, boolean>);
+
+    this.log.debug('nextDNSBlockedDomains', nextDNSBlockedDomains);
+
+    for (const blockedDomain of blockedDomains) {
+      const uuid = getUUID(this.api, blockedDomain);
       const existingAccessory = this.accessories.get(uuid);
 
       if (existingAccessory) {
-        // the accessory already exists
-        this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
+        this.log.debug(
+          'Restoring existing accessory from cache:',
+          existingAccessory.displayName,
+        );
 
-        // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. e.g.:
-        // existingAccessory.context.device = device;
-        // this.api.updatePlatformAccessories([existingAccessory]);
+        existingAccessory.context.isOn = !!nextDNSBlockedDomains[blockedDomain];
+        this.api.updatePlatformAccessories([existingAccessory]);
 
-        // create the accessory handler for the restored accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, existingAccessory);
-
-        // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, e.g.:
-        // remove platform accessories when no longer present
-        // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existingAccessory]);
-        // this.log.info('Removing existing accessory from cache:', existingAccessory.displayName);
+        this.BlockedDomainAccessories.set(uuid, new BlockedDomainAccessory(this, existingAccessory));
       } else {
-        // the accessory does not yet exist, so we need to create it
-        this.log.info('Adding new accessory:', device.exampleDisplayName);
+        this.log.debug('Adding new accessory:', uuid);
 
-        // create a new accessory
-        const accessory = new this.api.platformAccessory(device.exampleDisplayName, uuid);
+        const displayName = toTitleCase(`${blockedDomain.split('.')[0]} block`);
+
+        const accessory = new this.api.platformAccessory(
+          displayName,
+          uuid,
+        );
 
         // store a copy of the device object in the `accessory.context`
         // the `context` property can be used to store any data about the accessory you may need
-        accessory.context.device = device;
+        accessory.context.domain = blockedDomain;
+        accessory.context.displayName = displayName;
+        accessory.context.isOn = !!nextDNSBlockedDomains[blockedDomain];
 
         // create the accessory handler for the newly create accessory
         // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, accessory);
+        this.BlockedDomainAccessories.set(uuid, new BlockedDomainAccessory(this, accessory));
 
         // link the accessory to your platform
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
+          accessory,
+        ]);
       }
 
       // push into discoveredCacheUUIDs
@@ -142,9 +143,91 @@ export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
     // from this cloud account, then this device will no longer be present in the device list but will still be in the Homebridge cache
     for (const [uuid, accessory] of this.accessories) {
       if (!this.discoveredCacheUUIDs.includes(uuid)) {
-        this.log.info('Removing existing accessory from cache:', accessory.displayName);
-        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        this.log.debug(
+          'Removing existing accessory from cache:',
+          accessory.displayName,
+        );
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
+          accessory,
+        ]);
       }
     }
+
+    // Bootstrap async updates
+    this.bootstrapAsyncUpdates();
+  }
+
+  async bootstrapAsyncUpdates() {
+    const syncConfig = async () => {
+      this.log.debug('syncConfig called');
+      const response = await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}`, {
+        headers: {
+          'x-api-key': this.config.apiKey,
+        },
+      });
+
+      const data = await response.json() as { data: { denylist: Array<{ id: string, active: boolean}> } };
+
+      data.data.denylist.forEach(async (blockedDomain) => {
+        const accessory = this.accessories.get(getUUID(this.api, blockedDomain.id));
+        const service = accessory?.getService(this.Service.Switch);
+        if (service && service.getCharacteristic(this.Characteristic.On).value !== blockedDomain.active) {
+          this.log.debug('updating accessory', blockedDomain.id, blockedDomain.active);
+          service?.updateCharacteristic(this.Characteristic.On, blockedDomain.active);
+        }
+
+        const blockedDomainAccessory = this.BlockedDomainAccessories.get(getUUID(this.api, blockedDomain.id));
+
+        if (blockedDomainAccessory) {
+          this.accessories.get('adf')?.getService(this.Service.Switch)?.updateCharacteristic(this.Characteristic.On, blockedDomain.active);
+          blockedDomainAccessory.isOn = blockedDomain.active;
+        }
+      });
+
+      setTimeout(syncConfig, 60000);
+    }
+
+    syncConfig();
+  }
+
+  async blockDomain(domain: string) {
+    const response = await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.config.apiKey,
+      },
+      body: JSON.stringify({
+        active: true,
+      }),
+    });
+
+    if (!response.ok) {
+      // create the new domain
+      await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}/denylist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.config.apiKey,
+        },
+        body: JSON.stringify({
+          id: domain,
+          active: true,
+        }),
+      });
+    }
+  }
+
+  async unblockDomain(domain: string) {
+    await fetch(`https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.config.apiKey,
+      },
+      body: JSON.stringify({
+        active: false,
+      }),
+    });
   }
 }
