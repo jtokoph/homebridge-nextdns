@@ -92,9 +92,19 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
       },
     );
 
+    if (!response.ok) {
+      this.log.error('Failed to fetch profile:', response.statusText);
+      return;
+    }
+
     const data = (await response.json()) as {
       data: { denylist: Array<{ id: string; active: boolean }> };
     };
+
+    if (!data.data.denylist) {
+      this.log.error('Failed to fetch denylist');
+      data.data.denylist = [];
+    }
 
     const nextDNSBlockedDomains = data.data.denylist.reduce(
       (acc, domain) => {
@@ -187,6 +197,10 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
       const data = (await response.json()) as {
         data: { denylist: Array<{ id: string; active: boolean }> };
       };
+
+      if (!data.data.denylist) {
+        data.data.denylist = [];
+      }
 
       data.data.denylist.forEach(async (blockedDomain) => {
         const accessory = this.accessories.get(
