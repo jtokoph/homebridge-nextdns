@@ -1,0 +1,30 @@
+{
+	"bridge": {
+		"name": "HomebridgeNextDNSDev",
+		"username": "AA:BB:CC:DD:EE:FF",
+		"port": 51826,
+		"pin": "031-45-154"
+	},
+	"description": "HomeBridge HTTP Status Control",
+	"plugins": ["homebridge-nextdns", "homebridge-config-ui-x"],
+	"platforms": [
+		{
+			"name": "Config",
+			"port": 8585,
+			"auth": "none",
+			"theme": "auto",
+			"tempUnits": "c",
+			"lang": "auto",
+			"sudo": false,
+			"debug": false,
+			"platform": "config"
+		},
+		{
+			"platform": "HomebridgeNextDNS",
+			"name": "homebridge-nextdns",
+			"apiKey": "1234567890",
+      "profileId": "1234567890"
+		}
+	],
+	"accessories": []
+}
