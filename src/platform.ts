@@ -38,7 +38,7 @@ async function getNextDNSProfileData(
     );
 
     if (!response.ok) {
-      platform.log.error('Failed to fetch profile:', response.statusText);
+      platform.log.warn('Failed to fetch profile:', response.statusText);
       return null;
     }
 
@@ -48,7 +48,7 @@ async function getNextDNSProfileData(
 
     return json.data;
   } catch (error) {
-    platform.log.error('Failed to fetch profile:', error);
+    platform.log.warn('Failed to fetch profile:', error);
     return null;
   }
 }
@@ -81,7 +81,7 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
 
     if (!this.config.apiKey || !this.config.profileId) {
-      this.log.error(
+      this.log.warn(
         `${config.name} is not configured correctly. apiKey and profileId are required. The configuration provided was: ${JSON.stringify(config)}`,
       );
       return;
@@ -249,7 +249,7 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
           }
         });
       } catch (error) {
-        this.log.error('Failed to fetch profile:', error);
+        this.log.warn('Failed to fetch profile:', error);
       }
 
       setTimeout(syncConfig, 60000);
@@ -292,7 +292,7 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
         );
       }
     } catch (error) {
-      this.log.error('Failed to block domain:', error);
+      this.log.warn('Failed to block domain:', error);
     }
   }
 
@@ -312,7 +312,7 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
         },
       );
     } catch (error) {
-      this.log.error('Failed to unblock domain:', error);
+      this.log.warn('Failed to unblock domain:', error);
     }
   }
 }
