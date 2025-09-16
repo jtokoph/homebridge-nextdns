@@ -2,7 +2,7 @@
   "name": "homebridge-nextdns",
   "displayName": "Homebridge NextDNS",
   "type": "module",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "NextDNS plugin for Homebridge",
   "author": "Jason Tokoph",
   "license": "Apache-2.0",
