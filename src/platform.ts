@@ -7,7 +7,6 @@ import type {
   PlatformConfig,
   Service,
 } from 'homebridge';
-import fetch from 'node-fetch';
 import { BlockedDomainAccessory } from './blockedDomainAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 

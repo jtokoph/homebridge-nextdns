@@ -31,8 +31,7 @@
     "watch": "npm run build && npm link && nodemon"
   },
   "dependencies": {
-    "homebridge-lib": "^7.1.4",
-    "node-fetch": "^3.3.2"
+    "homebridge-lib": "^7.1.4"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.4",
