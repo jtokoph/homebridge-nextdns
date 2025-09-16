@@ -22,6 +22,37 @@ function toTitleCase(str: string) {
   );
 }
 
+async function getNextDNSProfileData(
+  platform: NextDNSPlatform,
+  apiKey: string,
+  profileId: string,
+) {
+  try {
+    const response = await fetch(
+      `https://api.nextdns.io/profiles/${profileId}`,
+      {
+        headers: {
+          'x-api-key': apiKey,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      platform.log.error('Failed to fetch profile:', response.statusText);
+      return null;
+    }
+
+    const json = (await response.json()) as {
+      data: { denylist: Array<{ id: string; active: boolean }> };
+    };
+
+    return json.data;
+  } catch (error) {
+    platform.log.error('Failed to fetch profile:', error);
+    return null;
+  }
+}
+
 /**
  * HomebridgePlatform
  * This class is the main constructor for your plugin, this is where you should
@@ -83,30 +114,19 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
   async discoverDevices() {
     const blockedDomains = this.config.blockedDomains || [];
 
-    const response = await fetch(
-      `https://api.nextdns.io/profiles/${this.config.profileId}`,
-      {
-        headers: {
-          'x-api-key': this.config.apiKey,
-        },
-      },
+    const data = await getNextDNSProfileData(
+      this,
+      this.config.apiKey,
+      this.config.profileId,
     );
 
-    if (!response.ok) {
-      this.log.error('Failed to fetch profile:', response.statusText);
-      return;
+    let denylist: Array<{ id: string; active: boolean }> = [];
+
+    if (data?.denylist) {
+      denylist = data.denylist;
     }
 
-    const data = (await response.json()) as {
-      data: { denylist: Array<{ id: string; active: boolean }> };
-    };
-
-    if (!data.data.denylist) {
-      this.log.error('Failed to fetch denylist');
-      data.data.denylist = [];
-    }
-
-    const nextDNSBlockedDomains = data.data.denylist.reduce(
+    const nextDNSBlockedDomains = denylist.reduce(
       (acc, domain) => {
         acc[domain.id] = domain.active;
         return acc;
@@ -185,59 +205,52 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
   async bootstrapAsyncUpdates() {
     const syncConfig = async () => {
       this.log.debug('syncConfig called');
-      const response = await fetch(
-        `https://api.nextdns.io/profiles/${this.config.profileId}`,
-        {
-          headers: {
-            'x-api-key': this.config.apiKey,
-          },
-        },
-      );
-
-      const data = (await response.json()) as {
-        data: { denylist: Array<{ id: string; active: boolean }> };
-      };
-
-      if (!data.data.denylist) {
-        data.data.denylist = [];
-      }
-
-      data.data.denylist.forEach(async (blockedDomain) => {
-        const accessory = this.accessories.get(
-          getUUID(this.api, blockedDomain.id),
-        );
-        const service = accessory?.getService(this.Service.Switch);
-        if (
-          service &&
-          service.getCharacteristic(this.Characteristic.On).value !==
-            blockedDomain.active
-        ) {
-          this.log.debug(
-            'updating accessory',
-            blockedDomain.id,
-            blockedDomain.active,
-          );
-          service?.updateCharacteristic(
-            this.Characteristic.On,
-            blockedDomain.active,
-          );
-        }
-
-        const blockedDomainAccessory = this.BlockedDomainAccessories.get(
-          getUUID(this.api, blockedDomain.id),
+      try {
+        const data = await getNextDNSProfileData(
+          this,
+          this.config.apiKey,
+          this.config.profileId,
         );
 
-        if (blockedDomainAccessory) {
-          this.accessories
-            .get('adf')
-            ?.getService(this.Service.Switch)
-            ?.updateCharacteristic(
+        data?.denylist.forEach(async (blockedDomain) => {
+          const accessory = this.accessories.get(
+            getUUID(this.api, blockedDomain.id),
+          );
+          const service = accessory?.getService(this.Service.Switch);
+          if (
+            service &&
+            service.getCharacteristic(this.Characteristic.On).value !==
+              blockedDomain.active
+          ) {
+            this.log.debug(
+              'updating accessory',
+              blockedDomain.id,
+              blockedDomain.active,
+            );
+            service?.updateCharacteristic(
               this.Characteristic.On,
               blockedDomain.active,
             );
-          blockedDomainAccessory.isOn = blockedDomain.active;
-        }
-      });
+          }
+
+          const blockedDomainAccessory = this.BlockedDomainAccessories.get(
+            getUUID(this.api, blockedDomain.id),
+          );
+
+          if (blockedDomainAccessory) {
+            this.accessories
+              .get('adf')
+              ?.getService(this.Service.Switch)
+              ?.updateCharacteristic(
+                this.Characteristic.On,
+                blockedDomain.active,
+              );
+            blockedDomainAccessory.isOn = blockedDomain.active;
+          }
+        });
+      } catch (error) {
+        this.log.error('Failed to fetch profile:', error);
+      }
 
       setTimeout(syncConfig, 60000);
     };
@@ -246,52 +259,60 @@ export class NextDNSPlatform implements DynamicPlatformPlugin {
   }
 
   async blockDomain(domain: string) {
-    const response = await fetch(
-      `https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.config.apiKey,
-        },
-        body: JSON.stringify({
-          active: true,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      // create the new domain
-      await fetch(
-        `https://api.nextdns.io/profiles/${this.config.profileId}/denylist`,
+    try {
+      const response = await fetch(
+        `https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`,
         {
-          method: 'POST',
+          method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': this.config.apiKey,
           },
           body: JSON.stringify({
-            id: domain,
             active: true,
           }),
         },
       );
+
+      if (!response.ok) {
+        // create the new domain
+        await fetch(
+          `https://api.nextdns.io/profiles/${this.config.profileId}/denylist`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': this.config.apiKey,
+            },
+            body: JSON.stringify({
+              id: domain,
+              active: true,
+            }),
+          },
+        );
+      }
+    } catch (error) {
+      this.log.error('Failed to block domain:', error);
     }
   }
 
   async unblockDomain(domain: string) {
-    await fetch(
-      `https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.config.apiKey,
+    try {
+      await fetch(
+        `https://api.nextdns.io/profiles/${this.config.profileId}/denylist/${domain}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.config.apiKey,
+          },
+          body: JSON.stringify({
+            active: false,
+          }),
         },
-        body: JSON.stringify({
-          active: false,
-        }),
-      },
-    );
+      );
+    } catch (error) {
+      this.log.error('Failed to unblock domain:', error);
+    }
   }
 }
