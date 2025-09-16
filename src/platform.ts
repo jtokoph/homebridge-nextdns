@@ -47,8 +47,10 @@ async function getNextDNSProfileData(
     };
 
     return json.data;
-  } catch (error) {
-    platform.log.warn('Failed to fetch profile:', error);
+  } catch (_) {
+    platform.log.warn(
+      'Failed to fetch profile. Ensure the API key and profile ID are correct and the network is reachable.',
+    );
     return null;
   }
 }
